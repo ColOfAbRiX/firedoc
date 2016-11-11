@@ -1,0 +1,79 @@
+- hosts: localhost
+
+  vars:
+    version:     "3.1.0"
+    archive_url: "https://github.com/Itseez/opencv/archive/{{ version }}.zip"
+
+  tasks:
+
+   - name: "Build tools"
+     package: name="{{ item }}" state=present
+     with_items: [ build-essential, cmake ]
+
+   - name: "GUI"
+     package: name="{{ item }}" state=present
+     with_items: [ qt5-default, libvtk6-dev ]
+
+   - name: "Media I/O"
+     package: name="{{ item }}" state=present
+     with_items: [ zlib1g-dev, libjpeg-dev, libwebp-dev, libpng-dev, libtiff5-dev, libjasper-dev, libopenexr-dev, libgdal-dev ]
+   
+#   - name: "Video I/O"
+#     package: name="{{ item }}" state=present
+#     with_items: [ libdc1394-22-dev, libavcodec-dev, libavformat-dev, libswscale-dev, libtheora-dev, libvorbis-dev, libxvidcore-dev, libx264-dev, yasm, libopencore-amrnb-dev, libopencore-amrwb-dev, libv4l-dev, libxine2-dev ]
+   
+   - name: "Parallelism and linear algebra libraries"
+     package: name="{{ item }}" state=present
+     with_items: [ libtbb-dev, libeigen3-dev ]
+   
+   - name: "Python"
+     package: name="{{ item }}" state=present
+     with_items: [ python-dev, python-tk, python-numpy, python-skimage ]
+
+   - name: "OpenCV Archive"
+     get_url:
+       url: "{{ archive_url }}"
+       dest: /tmp/opencv-src
+
+   - name: "Extract Archive"
+     unarchive:
+       src:        "/tmp/opencv-{{ version }}-src"
+       dest:       /tmp
+       remote_src: yes
+       list_files: yes
+     register: opencv_archive
+
+   - name: "Working Directory"
+     set_fact:
+       code_dir:  "/tmp/{{ opencv_archive.files | first }}"
+       build_dir: "/tmp/{{ opencv_archive.files | first }}/build"
+
+   - name: "Build Directory"
+     file: path="{{ build_dir }}" state=directory
+
+   - name: "Configure Make"
+     shell: cmake -DWITH_QT=ON -DWITH_OPENGL=ON -DFORCE_VTK=ON -DWITH_TBB=ON -DWITH_GDAL=ON -DWITH_XINE=ON -DBUILD_EXAMPLES=ON {{ code_dir }}
+     args:
+       chdir:   "{{ build_dir }}"
+       creates: "{{ build_dir }}/build.xml"
+
+   - name: "Compile Sources"
+     shell: make -j{{ [ansible_processor_vcpus - 1, 1] | max }}
+     args:
+       chdir: "{{ build_dir }}"
+       creates: "{{ build_dir }}/bin/opencv_createsamples"
+
+   - name: "Install the Build"
+     become_user: root
+     shell: make install
+     args:
+       chdir: "{{ build_dir }}"
+       creates: /usr/local/share/OpenCV/
+
+   - name: "Configure Dynamic Linker"
+     shell: ldconfig
+     args:
+       chdir: "{{ build_dir }}"
+
+   - name: "Cleanup"
+     file: path="{{ code_dir }}" state=absent
