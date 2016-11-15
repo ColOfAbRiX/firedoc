@@ -1,8 +1,12 @@
 - hosts: localhost
 
   vars:
-    version:     "3.1.0"
-    archive_url: "https://github.com/Itseez/opencv/archive/{{ version }}.zip"
+    version:        "3.1.0"
+    archive_url:    "https://github.com/Itseez/opencv/archive/{{ version }}.zip"
+    install_gui:    yes
+    install_media:  yes
+    install_video:  yes
+    install_python: yes
 
   tasks:
 
@@ -12,15 +16,18 @@
 
    - name: "GUI"
      package: name="{{ item }}" state=present
-     with_items: [ qt5-default, libvtk6-dev ]
+     with_items: [ qt5-default, libvtk6-dev, libgtk2.0-dev ]
+     when: install_gui | bool
 
    - name: "Media I/O"
      package: name="{{ item }}" state=present
      with_items: [ zlib1g-dev, libjpeg-dev, libwebp-dev, libpng-dev, libtiff5-dev, libjasper-dev, libopenexr-dev, libgdal-dev ]
+     when: install_media | bool
    
-#   - name: "Video I/O"
-#     package: name="{{ item }}" state=present
-#     with_items: [ libdc1394-22-dev, libavcodec-dev, libavformat-dev, libswscale-dev, libtheora-dev, libvorbis-dev, libxvidcore-dev, libx264-dev, yasm, libopencore-amrnb-dev, libopencore-amrwb-dev, libv4l-dev, libxine2-dev ]
+   - name: "Video I/O"
+     package: name="{{ item }}" state=present
+     with_items: [ libdc1394-22-dev, libavcodec-dev, libavformat-dev, libswscale-dev, libtheora-dev, libvorbis-dev, libxvidcore-dev, libx264-dev, yasm, libopencore-amrnb-dev, libopencore-amrwb-dev, libv4l-dev, libxine2-dev ]
+     when: install_video | bool
    
    - name: "Parallelism and linear algebra libraries"
      package: name="{{ item }}" state=present
@@ -28,12 +35,12 @@
    
    - name: "Python"
      package: name="{{ item }}" state=present
-     with_items: [ python-dev, python-tk, python-numpy, python-skimage ]
+     with_items: [ python-dev, python-numpy, python-skimage, python-tk ]
 
    - name: "OpenCV Archive"
      get_url:
-       url: "{{ archive_url }}"
-       dest: /tmp/opencv-src
+       url:  "{{ archive_url }}"
+       dest: "/tmp/opencv-{{ version }}-src"
 
    - name: "Extract Archive"
      unarchive:
