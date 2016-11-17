@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 # Import the necessary packages
-from skimage.filter import threshold_adaptive
 from transform import four_point_transform
 import imutils
 import numpy as np
@@ -9,34 +8,107 @@ import argparse
 import cv2
 
 # Parameters
-CLAHE_CLIP_LIMIT = 1.5
-CLAHE_GRID_SIZE = 8
-BLUR_KERNEL = 7
-CANNY_MINVAL = 100
-CANNY_MAXVAL = 150
-CANNY_SOBEL_SIZE = 3
-DILATE_KERNEL = 20
-DILATE_ITERATIONS = 1
+WORKING_HEIGHT = 1000
+CLAHE_CLIP_LIMIT = 2.0
+CLAHE_GRID_SIZE = 4
+BLUR_KERNEL = 9
+CANNY_MINVAL = 150
+CANNY_MAXVAL = 180
+CANNY_SOBEL_SIZE = 5
+DILATE_MORPH = 3
 APPROX_PRECISION = 0.02
 COVERING_AREA = 0.25
 
-def pre_process(img):
-	img   = img.copy()
-	clahe = cv2.createCLAHE(clipLimit = CLAHE_CLIP_LIMIT, tileGridSize = (CLAHE_GRID_SIZE, CLAHE_GRID_SIZE))
+def show(title, image, contour = []):
+	image = image.copy()
 
-	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	img = clahe.apply(img)
-	cv2.imshow("Equalized", img)
-
-	img = cv2.medianBlur(img, BLUR_KERNEL)
-	img = cv2.Canny(img, CANNY_MINVAL, CANNY_MAXVAL, CANNY_SOBEL_SIZE)
-	img = cv2.dilate(img, (DILATE_KERNEL, DILATE_KERNEL), iterations = DILATE_ITERATIONS)
-	cv2.imshow("Closed", img)
+	if len(contour) > 0:
+		cv2.drawContours(image, [contour], -1, (0, 0, 255), 2)
+	
+	cv2.imshow(title, image)
 
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 
-	return img
+def pre_process(image):
+	image = image.copy()
+
+	# Grescale
+	image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	
+	# CLAHE
+	clahe = cv2.createCLAHE(clipLimit = CLAHE_CLIP_LIMIT, tileGridSize = (CLAHE_GRID_SIZE, CLAHE_GRID_SIZE))
+	#mage = clahe.apply(image)
+
+	# Blur
+	image = cv2.medianBlur(image, BLUR_KERNEL)
+
+ 	# Threshold
+ 	#image = cv2.adaptiveThreshold(image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,11, 2)
+ 	ret, image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+	return image
+
+def find_edges(image):
+	image = image.copy()
+
+	# Edge detection
+	image = cv2.Canny(image, CANNY_MINVAL, CANNY_MAXVAL, CANNY_SOBEL_SIZE)
+
+	# Dilation
+	kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (DILATE_MORPH, DILATE_MORPH))
+	image = cv2.dilate(image, kernel)
+
+	return image
+
+def find_contours(image):
+	image = image.copy()
+
+	im2, contours, hierarchy = cv2.findContours(image.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_TC89_KCOS)
+	contours = sorted(contours, key = lambda c: cv2.contourArea(cv2.convexHull(c)), reverse = True)
+	
+	return contours
+
+def approx_hull(contours, image_area):
+	big_shapes = []
+	for c in contours:
+		approx = cv2.approxPolyDP(c, APPROX_PRECISION * cv2.arcLength(c, True), True)
+		hull = cv2.convexHull(approx)
+		hull_area = cv2.contourArea(hull)
+
+		if len(hull) >= 4 and hull_area >= image_area * COVERING_AREA:
+			big_shapes.append(hull)
+
+	if len(big_shapes) == 0:
+		return []
+
+	# Order by number of points, prefer less points
+	return sorted(big_shapes, key = len)[0]
+
+def approx_rect(contour):
+	skewed_rect = []
+
+	min_area_rect = np.int0(cv2.boxPoints(cv2.minAreaRect(contour)))
+	
+	for x in min_area_rect:
+		dists = [(y ,cv2.norm(x, y[0])) for y in contour]
+		dists = sorted(dists, key = lambda x: x[1])
+		skewed_rect.append(dists[0][0])
+
+	return min_area_rect
+	return np.array(skewed_rect)
+
+def deskew(image, rect):
+	image = image.copy()
+
+	image = four_point_transform(image, rect.reshape(4, 2) * ratio)
+
+	image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+ 	ret, image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+	return image
+
 
 # Get arguments from command line
 ap = argparse.ArgumentParser(description = 'Process some integers.')
@@ -45,66 +117,49 @@ args = vars(ap.parse_args())
 
 # Loading
 image = cv2.imread(args["image"])
-image = imutils.resize(image, height = 500)
-
-width, height = image.shape[:2]
-image_area = width * height
-
+image = imutils.resize(image, height = WORKING_HEIGHT)
+ratio = image.shape[0] / float(WORKING_HEIGHT)
 orig  = image.copy()
+
+#
+# Pre-processing
+#
+
 image = pre_process(image)
+show("Pre-processed", image)
 
-def contour_metric(contour):
-	return cv2.contourArea(cv2.convexHull(contour))
+#
+# Contouring
+#
 
-# find the contours in the edged image, keeping only the largest ones, and initialize the screen contour
-im2, contours, hierarchy = cv2.findContours(image.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE )
-contours = sorted(contours, key = contour_metric, reverse = True)
+# Find edges
+image = find_edges(image)
+show("Edges", image)
 
-# loop over the contours
-big_shapes = []
-for c in contours:
-	# approximate the contour
-	approx = cv2.approxPolyDP(c, APPROX_PRECISION * cv2.arcLength(c, True), True)
-	hull = cv2.convexHull(approx)
-	hull_area = cv2.contourArea(hull)
-
-	if len(hull) > 4 and hull_area >= image_area * COVERING_AREA:
-		big_shapes.append(hull)
-
-
-# Order by number of points, prefer less points
-contours = sorted(big_shapes, key = len)
-
+# Find contours
+contours = find_contours(image)
+image_contours = orig.copy()
 if len(contours) == 0:
 	print "No paper-shape found. Exit."
 	exit()
+show("Contour", orig, contours[0])
 
-paper = contours[0]
-hull = cv2.convexHull(paper)
+#
+# Perspective Approximation and correction
+#
 
-# show the contour (outline) of the piece of paper
-with_contours = orig.copy()
-cv2.drawContours(with_contours, [paper], -1, (0, 0, 255), 2)
-cv2.drawContours(with_contours, paper, -1, (255, 0, 0), 4)
-cv2.drawContours(with_contours, [hull], -1, (0, 255, 0), 2)
-cv2.drawContours(with_contours, hull, -1, (0, 255, 0), 4)
-cv2.imshow("With contours", with_contours)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# Find best approximated hull
+image_area = image.shape[0] * image.shape[1]
+contour = approx_hull(contours, image_area)
+if len(contour) == 0:
+	print "No paper-shape found. Exit."
+	exit()
+show("Approx Hull", orig, contour)
 
-exit()
+# Find best approximate skewed rectangle
+rectangle = approx_rect(contour)
+show("Skewed Rectangle", orig, rectangle)
 
-# apply the four point transform to obtain a top-down
-# view of the original image
-warped = four_point_transform(orig, screenCnt.reshape(4, 2) * ratio)
- 
-# convert the warped image to grayscale, then threshold it
-# to give it that 'black and white' paper effect
-warped = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-warped = threshold_adaptive(warped, 251, offset = 10)
-warped = warped.astype("uint8") * 255
- 
-# show the original and scanned images
-print "STEP 3: Apply perspective transform"
-cv2.imshow("Scanned", imutils.resize(warped, height = 650))
-cv2.waitKey(0)
+# Correct perspective
+image = deskew(orig, rectangle)
+show("Deskewed Image", image)

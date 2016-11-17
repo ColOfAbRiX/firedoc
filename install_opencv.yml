@@ -37,10 +37,15 @@
      package: name="{{ item }}" state=present
      with_items: [ python-dev, python-numpy, python-skimage, python-tk ]
 
+   - name: "Find if OpenCV is Installed"
+     find: paths="/usr/local/bin/opencv_annotation"
+     register: opencv_installed
+
    - name: "OpenCV Archive"
      get_url:
        url:  "{{ archive_url }}"
        dest: "/tmp/opencv-{{ version }}-src"
+     when: opencv_installed.matched > 0
 
    - name: "Extract Archive"
      unarchive:
@@ -48,27 +53,32 @@
        dest:       /tmp
        remote_src: yes
        list_files: yes
+     when: opencv_installed.matched > 0
      register: opencv_archive
 
    - name: "Working Directory"
      set_fact:
        code_dir:  "/tmp/{{ opencv_archive.files | first }}"
        build_dir: "/tmp/{{ opencv_archive.files | first }}/build"
+     when: opencv_installed.matched > 0
 
    - name: "Build Directory"
      file: path="{{ build_dir }}" state=directory
+     when: opencv_installed.matched > 0
 
    - name: "Configure Make"
      shell: cmake -DWITH_QT=ON -DWITH_OPENGL=ON -DFORCE_VTK=ON -DWITH_TBB=ON -DWITH_GDAL=ON -DWITH_XINE=ON -DBUILD_EXAMPLES=ON {{ code_dir }}
      args:
        chdir:   "{{ build_dir }}"
        creates: "{{ build_dir }}/build.xml"
+     when: opencv_installed.matched > 0
 
    - name: "Compile Sources"
      shell: make -j{{ [ansible_processor_vcpus - 1, 1] | max }}
      args:
        chdir: "{{ build_dir }}"
        creates: "{{ build_dir }}/bin/opencv_createsamples"
+     when: opencv_installed.matched > 0
 
    - name: "Install the Build"
      become_user: root
@@ -76,11 +86,21 @@
      args:
        chdir: "{{ build_dir }}"
        creates: /usr/local/share/OpenCV/
+     when: opencv_installed.matched > 0
 
    - name: "Configure Dynamic Linker"
      shell: ldconfig
      args:
        chdir: "{{ build_dir }}"
+     when: opencv_installed.matched > 0
 
    - name: "Cleanup"
      file: path="{{ code_dir }}" state=absent
+     when: opencv_installed.matched > 0
+
+   - name: "Install Tesseract"
+     package: name="{{ item }}" state=present
+     with_items: [tesseract-ocr, tesseract-ocr-eng]
+
+   - name: "Install PyTesser"
+     pip: name=pytesseract
