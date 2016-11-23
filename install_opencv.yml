@@ -1,12 +1,13 @@
 - hosts: localhost
 
   vars:
-    version:        "3.1.0"
-    archive_url:    "https://github.com/Itseez/opencv/archive/{{ version }}.zip"
-    install_gui:    yes
-    install_media:  yes
-    install_video:  yes
-    install_python: yes
+    version:           "3.1.0"
+    archive_url:       "https://github.com/Itseez/opencv/archive/{{ version }}.zip"
+    install_gui:       yes
+    install_media:     yes
+    install_video:     yes
+    install_python:    yes
+    install_tesseract: yes
 
   tasks:
 
@@ -101,6 +102,9 @@
    - name: "Install Tesseract"
      package: name="{{ item }}" state=present
      with_items: [tesseract-ocr, tesseract-ocr-eng]
+     when: install_tesseract | bool
 
    - name: "Install PyTesser"
      pip: name=pytesseract
+     when: install_tesseract | bool and 
+           install_python | bool
