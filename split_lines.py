@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# See: http://stackoverflow.com/questions/34981144/split-text-lines-in-scanned-document
 
 # Import the necessary packages
 import numpy as np
