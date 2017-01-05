@@ -5,9 +5,9 @@
     archive_url:       "https://github.com/Itseez/opencv/archive/{{ version }}.zip"
     install_gui:       yes
     install_media:     yes
-    install_video:     yes
+    install_video:     no
     install_python:    yes
-    install_tesseract: yes
+    install_tesseract: no
     install_opencv:    no
 
   tasks:

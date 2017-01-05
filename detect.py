@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 # Import the necessary packages
-from utils import *
-from sklearn.cluster import MeanShift, estimate_bandwidth
 from sklearn.datasets.samples_generator import make_blobs
+from sklearn.cluster import AffinityPropagation
+from pprint import pprint
 
+from utils import *
 import numpy as np
 import argparse
 import math
@@ -15,7 +16,7 @@ BLUR_KERNEL = WORKING_HEIGHT / 100 + WORKING_HEIGHT / 100 % 2 - 1
 CANNY_MINVAL = 80
 CANNY_MAXVAL = 150
 CANNY_SOBEL_SIZE = 5
-MAX_ROTATION = np.pi / 6
+MAX_ROTATION = np.pi / 4
 
 def pre_process(image):
     image = image.copy()
@@ -72,42 +73,29 @@ image = cv2.Canny(image, CANNY_MINVAL, CANNY_MAXVAL, apertureSize=3)
 show("Edges", image)
 
 #
-# Lines detectoin
+# Lines detection
 #
 
-lines = []
-# Vertical lines
-lines += cv2.HoughLines(image, 1, theta = np.pi / 180,
+# Vertical
+lines_v = cv2.HoughLines(image, 1, theta = np.pi / 180,
     threshold = 70,
     min_theta = -MAX_ROTATION,
     max_theta = +MAX_ROTATION
-).tolist()
-# Horizontal lines
-lines += cv2.HoughLines(image, 1, theta = np.pi / 180,
+)
+lines_v = np.array([[x[0][0], x[0][1]] for x in lines_v])
+af_v = AffinityPropagation(preference=-50).fit(lines_v)
+
+# Vertical
+lines_h = cv2.HoughLines(image, 1, theta = np.pi / 180,
     threshold = 70,
     min_theta = np.pi / 2 - MAX_ROTATION,
     max_theta = np.pi / 2 + MAX_ROTATION
-).tolist()
-
-display_image = orig_image.copy()
-for l in lines:
-    x1, y1, x2, y2 = rt_to_xy(l[0][0], l[0][1])
-    display_image = cv2.line(display_image, (x1,y1), (x2,y2), (0, 255, 0), 1)
-show("Image", display_image)
-
-#
-# Clustering
-#
-
-lines = np.array([[x[0][0], x[0][1]] for x in lines])
-
-bandwidth = estimate_bandwidth(lines, quantile=0.2, n_samples=500)
-ms = MeanShift(
-    bandwidth=bandwidth,
-    bin_seeding=True
 )
-ms.fit(lines)
-lines = ms.cluster_centers_
+lines_h = np.array([[x[0][0], x[0][1]] for x in lines_h])
+af_h = AffinityPropagation(preference=-50).fit(lines_h)
+
+# All lines
+lines = af_v.cluster_centers_.tolist() + af_h.cluster_centers_.tolist()
 
 display_image = orig_image.copy()
 for rho, theta in lines:
