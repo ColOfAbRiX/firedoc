@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+#
+# Splits the text lines in a bill. It requires the bill to be full
+# picture and without any perspective distorsion
+#
 # See: http://stackoverflow.com/questions/34981144/split-text-lines-in-scanned-document
 
 # Import the necessary packages

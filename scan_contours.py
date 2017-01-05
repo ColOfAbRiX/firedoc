@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+#
+# Detects the document using a contour detection and convext hulls
+#
 
 # Import the necessary packages
 import imutils

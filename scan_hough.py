@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+#
+# Detects the document using a Hough transform and cluster detection 
+#
 
 # Import the necessary packages
 from sklearn.datasets.samples_generator import make_blobs
