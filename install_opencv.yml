@@ -16,14 +16,14 @@
 - hosts: localhost
 
   vars:
-    version:           "3.1.0"
+    version:           "3.2.0"
     archive_url:       "https://github.com/Itseez/opencv/archive/{{ version }}.zip"
     install_gui:       yes
     install_media:     yes
     install_video:     no
     install_python:    yes
     install_tesseract: no
-    install_opencv:    no
+    install_opencv:    yes
 
   tasks:
 
@@ -75,7 +75,7 @@
      get_url:
        url:  "{{ archive_url }}"
        dest: "/tmp/opencv-{{ version }}-src"
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
 
    - name: "Extract Archive"
@@ -84,7 +84,7 @@
        dest:       /tmp
        remote_src: yes
        list_files: yes
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
      register: opencv_archive
 
@@ -92,20 +92,20 @@
      set_fact:
        code_dir:  "/tmp/{{ opencv_archive.files | first }}"
        build_dir: "/tmp/{{ opencv_archive.files | first }}/build"
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
 
    - name: "Build Directory"
      file: path="{{ build_dir }}" state=directory
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
 
    - name: "Configure Make"
-     shell: cmake -DWITH_QT=ON -DWITH_OPENGL=ON -DFORCE_VTK=ON -DWITH_TBB=ON -DWITH_GDAL=ON -DWITH_XINE=ON -DBUILD_EXAMPLES=ON {{ code_dir }}
+     shell: cmake -DWITH_QT=ON -DWITH_OPENGL=ON -DFORCE_VTK=ON -DWITH_TBB=ON -DWITH_GDAL=ON -DWITH_XINE=ON -DBUILD_EXAMPLES=ON -DENABLE_PRECOMPILED_HEADERS=OFF {{ code_dir }}
      args:
        chdir:   "{{ build_dir }}"
        creates: "{{ build_dir }}/build.xml"
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
 
    - name: "Compile Sources"
@@ -113,7 +113,7 @@
      args:
        chdir: "{{ build_dir }}"
        creates: "{{ build_dir }}/bin/opencv_createsamples"
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
 
    - name: "Install the Build"
@@ -122,17 +122,17 @@
      args:
        chdir: "{{ build_dir }}"
        creates: /usr/local/share/OpenCV/
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
 
    - name: "Configure Dynamic Linker"
      shell: ldconfig
      args:
        chdir: "{{ build_dir }}"
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
 
    - name: "Cleanup"
      file: path="{{ code_dir }}" state=absent
-     when: opencv_installed.matched > 0 and
+     when: opencv_installed.matched < 1 and
            install_opencv | bool
